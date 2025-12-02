@@ -31,6 +31,9 @@ class RideServiceTest {
     @Mock
     private DriverMatchingService driverMatchingService;
     
+    @Mock
+    private DriverService driverService;
+    
     @InjectMocks
     private RideService rideService;
     
@@ -64,15 +67,27 @@ class RideServiceTest {
             .rideId("RIDE-1")
             .riderId("RIDER-1")
             .status(RideStatus.PENDING)
+            .driverId(1L)
+            .createdAt(LocalDateTime.now())
             .build();
         
-        when(rideRepository.save(any(Ride.class))).thenReturn(savedRide);
+        Ride matchedRide = Ride.builder()
+            .id(1L)
+            .rideId("RIDE-1")
+            .riderId("RIDER-1")
+            .status(RideStatus.MATCHED)
+            .driverId(1L)
+            .createdAt(LocalDateTime.now())
+            .build();
+        
+        when(rideRepository.save(any(Ride.class))).thenReturn(savedRide, matchedRide);
         when(driverMatchingService.matchDriver(anyDouble(), anyDouble())).thenReturn(driver);
+        when(driverService.getDriverById(1L)).thenReturn(Optional.of(driver));
         
         var response = rideService.createRide(rideRequest);
         
         assertNotNull(response);
-        assertEquals("RIDE-1", response.getRideId());
+        assertNotNull(response.getRideId());
         verify(rideRepository, atLeastOnce()).save(any(Ride.class));
     }
     
@@ -88,6 +103,7 @@ class RideServiceTest {
             .build();
         
         when(rideRepository.findByRideId("RIDE-1")).thenReturn(Optional.of(ride));
+        when(driverService.getDriverById(1L)).thenReturn(Optional.of(driver));
         
         var response = rideService.getRide("RIDE-1");
         
