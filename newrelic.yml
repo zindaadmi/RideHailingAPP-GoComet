@@ -1,0 +1,48 @@
+common: &default_settings
+  app_name: GoComet DAW
+  license_key: YOUR_LICENSE_KEY_HERE  # Replace with your actual license key from New Relic
+  
+  # Logging
+  log_file_path: logs
+  log_level: info
+  
+  # Transaction tracing
+  transaction_tracer:
+    enabled: true
+    record_sql: obfuscated
+    stack_trace_threshold: 0.5
+    
+  # Error collection
+  error_collector:
+    enabled: true
+    capture_events: true
+    
+  # Browser monitoring
+  browser_monitoring:
+    enabled: false
+    
+  # Thread profiler
+  thread_profiler:
+    enabled: true
+    
+  # Distributed tracing
+  distributed_tracing:
+    enabled: true
+    
+  # Application logging
+  application_logging:
+    enabled: true
+    forwarding:
+      enabled: true
+    metrics:
+      enabled: true
+    local_decorating:
+      enabled: true
+
+development:
+  <<: *default_settings
+  app_name: GoComet DAW (Dev)
+
+production:
+  <<: *default_settings
+  app_name: GoComet DAW (Prod)

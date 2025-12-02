@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GoComet DAW - Ride Hailing Application</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🚗 GoComet DAW</h1>
+            <p class="subtitle">Ride Hailing Platform</p>
+        </header>
+
+        <div class="main-content">
+            <!-- Ride Request Section -->
+            <section class="card" id="rideRequestSection">
+                <h2>Request a Ride</h2>
+                <form id="rideForm">
+                    <div class="form-group">
+                        <label for="riderId">Rider ID:</label>
+                        <input type="text" id="riderId" value="RIDER-1" required>
+                    </div>
+                    
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="pickupLat">Pickup Latitude:</label>
+                            <input type="number" id="pickupLat" value="28.7041" step="0.0001" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="pickupLng">Pickup Longitude:</label>
+                            <input type="number" id="pickupLng" value="77.1025" step="0.0001" required>
+                        </div>
+                    </div>
+                    
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="destLat">Destination Latitude:</label>
+                            <input type="number" id="destLat" value="28.5355" step="0.0001" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="destLng">Destination Longitude:</label>
+                            <input type="number" id="destLng" value="77.3910" step="0.0001" required>
+                        </div>
+                    </div>
+                    
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="tier">Ride Tier:</label>
+                            <select id="tier" required>
+                                <option value="ECONOMY">Economy</option>
+                                <option value="PREMIUM">Premium</option>
+                                <option value="LUXURY">Luxury</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="paymentMethod">Payment Method:</label>
+                            <select id="paymentMethod" required>
+                                <option value="CASH">Cash</option>
+                                <option value="CARD">Card</option>
+                                <option value="UPI">UPI</option>
+                                <option value="WALLET">Wallet</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <button type="submit" class="btn btn-primary">Request Ride</button>
+                </form>
+            </section>
+
+            <!-- Ride Status Section -->
+            <section class="card" id="rideStatusSection" style="display: none;">
+                <h2>Ride Status</h2>
+                <div id="rideStatus">
+                    <div class="status-info">
+                        <div class="status-item">
+                            <span class="label">Ride ID:</span>
+                            <span class="value" id="statusRideId">-</span>
+                        </div>
+                        <div class="status-item">
+                            <span class="label">Status:</span>
+                            <span class="value status-badge" id="statusStatus">-</span>
+                        </div>
+                        <div class="status-item">
+                            <span class="label">Driver ID:</span>
+                            <span class="value" id="statusDriverId">-</span>
+                        </div>
+                        <div class="status-item">
+                            <span class="label">Trip ID:</span>
+                            <span class="value" id="statusTripId">-</span>
+                        </div>
+                        <div class="status-item">
+                            <span class="label">Created At:</span>
+                            <span class="value" id="statusCreatedAt">-</span>
+                        </div>
+                        <div class="status-item">
+                            <span class="label">Matched At:</span>
+                            <span class="value" id="statusMatchedAt">-</span>
+                        </div>
+                    </div>
+                    <div id="tripActions" style="display: none; margin-top: 15px;">
+                        <button class="btn btn-primary" onclick="endTrip()" id="endTripBtn">End Trip</button>
+                    </div>
+                    <div id="paymentSection" style="display: none; margin-top: 15px;">
+                        <div class="status-item" style="background: #e8f5e9; padding: 15px; border-radius: 5px;">
+                            <div style="margin-bottom: 10px;">
+                                <strong>Trip Completed!</strong>
+                            </div>
+                            <div class="status-item">
+                                <span class="label">Total Fare:</span>
+                                <span class="value" id="tripFare" style="font-size: 1.2em; color: #2e7d32; font-weight: bold;">-</span>
+                            </div>
+                            <button class="btn btn-primary" onclick="processPayment()" id="payBtn" style="margin-top: 10px; width: 100%;">Pay Now</button>
+                        </div>
+                    </div>
+                    <button class="btn btn-secondary" onclick="stopPolling()" style="margin-top: 10px;">Stop Tracking</button>
+                </div>
+            </section>
+
+            <!-- Driver Location Update Section -->
+            <section class="card">
+                <h2>Driver Location Update</h2>
+                <form id="driverLocationForm">
+                    <div class="form-group">
+                        <label for="driverId">Driver ID:</label>
+                        <input type="text" id="driverId" value="DRIVER-1" required>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="driverLat">Latitude:</label>
+                            <input type="number" id="driverLat" value="28.7041" step="0.0001" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="driverLng">Longitude:</label>
+                            <input type="number" id="driverLng" value="77.1025" step="0.0001" required>
+                        </div>
+                    </div>
+                    <button type="submit" class="btn btn-primary">Update Location</button>
+                </form>
+            </section>
+
+            <!-- Messages Section -->
+            <section class="card">
+                <h2>Activity Log</h2>
+                <div id="messages" class="messages"></div>
+            </section>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
+
