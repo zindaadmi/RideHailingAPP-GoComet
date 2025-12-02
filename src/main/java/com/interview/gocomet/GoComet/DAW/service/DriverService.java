@@ -58,10 +58,23 @@ public class DriverService {
         Driver driver = driverRepository.findByDriverId(driverId)
             .orElseThrow(() -> new RuntimeException("Driver not found: " + driverId));
         
-        if (driver.getStatus() != DriverStatus.ASSIGNED) {
-            throw new IllegalStateException("Driver is not in ASSIGNED status");
+        // Allow acceptance if driver is ASSIGNED or AVAILABLE (for flexibility)
+        // If AVAILABLE, we'll set to ASSIGNED first, then ON_TRIP
+        if (driver.getStatus() == DriverStatus.ON_TRIP) {
+            throw new IllegalStateException("Driver is already on a trip");
         }
         
+        if (driver.getStatus() == DriverStatus.OFFLINE) {
+            throw new IllegalStateException("Driver is offline");
+        }
+        
+        // If driver is AVAILABLE, set to ASSIGNED first (in case matching didn't set it)
+        if (driver.getStatus() == DriverStatus.AVAILABLE) {
+            log.warn("Driver {} was AVAILABLE instead of ASSIGNED, setting to ASSIGNED", driverId);
+            driver.setStatus(DriverStatus.ASSIGNED);
+        }
+        
+        // Now set to ON_TRIP
         driver.setStatus(DriverStatus.ON_TRIP);
         driver.setCurrentRideId(rideId);
         

@@ -56,7 +56,6 @@ document.getElementById('rideForm').addEventListener('submit', async (e) => {
                 const errorData = await response.json();
                 errorMessage = errorData.error || errorData.message || errorMessage;
             } catch (e) {
-                // If response is not JSON, use status text
                 errorMessage = response.statusText || errorMessage;
             }
             throw new Error(errorMessage);
@@ -81,47 +80,6 @@ document.getElementById('rideForm').addEventListener('submit', async (e) => {
     }
 });
 
-// Handle driver location update
-document.getElementById('driverLocationForm').addEventListener('submit', async (e) => {
-    e.preventDefault();
-    
-    const driverId = document.getElementById('driverId').value;
-    const locationData = {
-        latitude: parseFloat(document.getElementById('driverLat').value),
-        longitude: parseFloat(document.getElementById('driverLng').value)
-    };
-    
-    try {
-        addMessage(`Updating location for driver ${driverId}...`, 'info');
-        
-        const response = await fetch(`${API_BASE_URL}/drivers/${driverId}/location`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify(locationData)
-        });
-        
-        if (!response.ok) {
-            let errorMessage = 'Failed to update location';
-            try {
-                const errorData = await response.json();
-                errorMessage = errorData.error || errorData.message || errorMessage;
-            } catch (e) {
-                errorMessage = response.statusText || errorMessage;
-            }
-            throw new Error(errorMessage);
-        }
-        
-        const driver = await response.json();
-        addMessage(`Location updated successfully for driver ${driverId}`, 'success');
-        
-    } catch (error) {
-        addMessage(`Error: ${error.message}`, 'error');
-        console.error('Error updating location:', error);
-    }
-});
-
 // Update ride status display
 function updateRideStatus(ride) {
     document.getElementById('statusRideId').textContent = ride.rideId || '-';
@@ -139,21 +97,22 @@ function updateRideStatus(ride) {
         currentTripId = ride.tripId;
     }
     
-    // Show/hide trip actions based on status
-    if (ride.status === 'IN_PROGRESS' && ride.tripId) {
-        document.getElementById('tripActions').style.display = 'block';
-        document.getElementById('acceptRideSection').style.display = 'none';
-    } else if (ride.status === 'MATCHED' && ride.driverId && !ride.tripId) {
-        // Show accept button when driver is matched but not accepted yet
-        document.getElementById('acceptRideSection').style.display = 'block';
-        document.getElementById('tripActions').style.display = 'none';
-    } else if (ride.status === 'ACCEPTED' && !ride.tripId) {
-        // Trip should start automatically, but show accept button as fallback
-        document.getElementById('acceptRideSection').style.display = 'block';
-        document.getElementById('tripActions').style.display = 'none';
-    } else {
-        document.getElementById('tripActions').style.display = 'none';
-        document.getElementById('acceptRideSection').style.display = 'none';
+    // Update ride ID copy field
+    const rideIdInput = document.getElementById('rideIdToCopy');
+    const rideIdCopySection = document.getElementById('rideIdCopySection');
+    if (rideIdInput) {
+        rideIdInput.value = ride.rideId || '';
+    }
+    
+    // Show/hide ride ID copy section based on status
+    if (rideIdCopySection) {
+        if (ride.status === 'MATCHED' && ride.driverId) {
+            rideIdCopySection.style.display = 'block';
+        } else if (ride.status === 'ACCEPTED' || ride.status === 'IN_PROGRESS' || ride.status === 'COMPLETED') {
+            rideIdCopySection.style.display = 'none';
+        } else {
+            rideIdCopySection.style.display = 'none';
+        }
     }
 }
 
@@ -181,28 +140,60 @@ async function pollRideStatus(rideId) {
         const ride = await response.json();
         updateRideStatus(ride);
         
-        // Log status changes
-        if (ride.status === 'MATCHED' && ride.driverId) {
-            addMessage(`Driver matched! Driver ID: ${ride.driverId}`, 'success');
-        } else if (ride.status === 'ACCEPTED') {
-            addMessage('Driver accepted the ride! Trip will start automatically...', 'success');
-        } else if (ride.status === 'IN_PROGRESS') {
-            addMessage('Trip started!', 'success');
-            // Show end trip button if trip ID exists
+        // Log status changes (only show message once per status change)
+        const previousStatus = document.getElementById('statusStatus').getAttribute('data-previous-status') || '';
+        const currentStatus = ride.status?.toString() || '';
+        
+        if (ride.status === 'MATCHED' && ride.driverId && previousStatus !== 'MATCHED') {
+            addMessage(`✅ Driver matched! Driver ID: ${ride.driverId}`, 'success');
+            addMessage(`📋 Copy the Ride ID above and give it to the driver to accept the ride.`, 'info');
+            document.getElementById('statusStatus').setAttribute('data-previous-status', 'MATCHED');
+        } else if (ride.status === 'ACCEPTED' && previousStatus !== 'ACCEPTED') {
+            addMessage('✅ Driver accepted the ride! Trip will start automatically...', 'success');
+            document.getElementById('statusStatus').setAttribute('data-previous-status', 'ACCEPTED');
+        } else if (ride.status === 'IN_PROGRESS' && previousStatus !== 'IN_PROGRESS') {
+            addMessage('🚗 Trip started! Driver is on the way.', 'success');
             if (ride.tripId) {
                 currentTripId = ride.tripId;
-                document.getElementById('tripActions').style.display = 'block';
             }
-        } else if (ride.status === 'COMPLETED') {
-            addMessage('Trip completed!', 'success');
-            stopPolling();
-            // Fetch trip details to show fare
+            document.getElementById('statusStatus').setAttribute('data-previous-status', 'IN_PROGRESS');
+        } else if (ride.status === 'COMPLETED' && previousStatus !== 'COMPLETED') {
+            addMessage('✅ Trip completed! Fetching fare details...', 'success');
+            // Show payment section immediately
+            document.getElementById('paymentSection').style.display = 'block';
+            
+            // Fetch trip details to show fare and payment section
             if (ride.tripId) {
+                currentTripId = ride.tripId;
+                // Fetch trip details immediately
+                fetchTripDetails(ride.tripId);
+            } else {
+                addMessage('Fetching trip details...', 'info');
+                // Try to get trip ID from ride if not available
+                setTimeout(() => {
+                    if (!currentTripId && ride.tripId) {
+                        currentTripId = ride.tripId;
+                        fetchTripDetails(ride.tripId);
+                    }
+                }, 1000);
+            }
+            document.getElementById('statusStatus').setAttribute('data-previous-status', 'COMPLETED');
+        } else if (ride.status === 'COMPLETED' && previousStatus === 'COMPLETED') {
+            // Already completed, ensure payment section is shown
+            document.getElementById('paymentSection').style.display = 'block';
+            if (ride.tripId && !currentTripId) {
+                currentTripId = ride.tripId;
                 fetchTripDetails(ride.tripId);
             }
-        } else if (ride.status === 'CANCELLED') {
+        } else if (ride.status === 'CANCELLED' && previousStatus !== 'CANCELLED') {
             addMessage('Ride cancelled.', 'error');
             stopPolling();
+            document.getElementById('statusStatus').setAttribute('data-previous-status', 'CANCELLED');
+        }
+        
+        // Update previous status
+        if (currentStatus) {
+            document.getElementById('statusStatus').setAttribute('data-previous-status', currentStatus);
         }
         
     } catch (error) {
@@ -237,148 +228,75 @@ function stopPolling() {
     }
 }
 
-// End trip
-async function endTrip() {
-    if (!currentTripId) {
-        addMessage('No active trip to end', 'error');
-        return;
-    }
-    
-    try {
-        addMessage(`Ending trip ${currentTripId}...`, 'info');
-        document.getElementById('endTripBtn').disabled = true;
-        
-        const response = await fetch(`${API_BASE_URL}/trips/${currentTripId}/end`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            }
-        });
-        
-        if (!response.ok) {
-            let errorMessage = 'Failed to end trip';
-            try {
-                const errorData = await response.json();
-                errorMessage = errorData.error || errorData.message || errorMessage;
-            } catch (e) {
-                errorMessage = response.statusText || errorMessage;
-            }
-            throw new Error(errorMessage);
-        }
-        
-        const trip = await response.json();
-        addMessage(`Trip ended successfully! Fare: ₹${trip.totalFare?.toFixed(2) || '0.00'}`, 'success');
-        
-        // Show payment section
-        document.getElementById('tripActions').style.display = 'none';
-        document.getElementById('paymentSection').style.display = 'block';
-        document.getElementById('tripFare').textContent = `₹${trip.totalFare?.toFixed(2) || '0.00'}`;
-        
-        // Update ride status
-        if (currentRideId) {
-            pollRideStatus(currentRideId);
-        }
-        
-    } catch (error) {
-        addMessage(`Error: ${error.message}`, 'error');
-        document.getElementById('endTripBtn').disabled = false;
-        console.error('Error ending trip:', error);
-    }
-}
-
 // Fetch trip details
 async function fetchTripDetails(tripId) {
     try {
         const response = await fetch(`${API_BASE_URL}/trips/${tripId}`);
         if (response.ok) {
             const trip = await response.json();
-            if (trip.status === 'COMPLETED' && trip.totalFare) {
-                document.getElementById('paymentSection').style.display = 'block';
-                document.getElementById('tripFare').textContent = `₹${trip.totalFare.toFixed(2)}`;
-                currentTripId = tripId;
+            currentTripId = tripId;
+            
+            // Always show payment section when trip is completed
+            const paymentSection = document.getElementById('paymentSection');
+            if (paymentSection) {
+                paymentSection.style.display = 'block';
+                paymentSection.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
             }
+            
+            if (trip.status === 'COMPLETED' && trip.totalFare != null) {
+                document.getElementById('tripFare').textContent = `₹${trip.totalFare.toFixed(2)}`;
+                addMessage(`💰 Total fare: ₹${trip.totalFare.toFixed(2)}. Click "Pay Now" button below to complete payment.`, 'success');
+            } else if (trip.status === 'COMPLETED') {
+                // Trip completed but fare not calculated yet
+                document.getElementById('tripFare').textContent = 'Calculating...';
+                addMessage('Trip completed. Fare is being calculated...', 'info');
+                // Retry after a delay
+                setTimeout(() => fetchTripDetails(tripId), 2000);
+            }
+        } else {
+            addMessage('Could not fetch trip details. You can still try to pay using the button below.', 'warning');
+            // Show payment section anyway with manual pay option
+            const paymentSection = document.getElementById('paymentSection');
+            if (paymentSection) {
+                paymentSection.style.display = 'block';
+                paymentSection.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            }
+            document.getElementById('tripFare').textContent = 'N/A';
+            currentTripId = tripId;
         }
     } catch (error) {
         console.error('Error fetching trip details:', error);
-    }
-}
-
-// Accept ride (driver accepts the ride)
-async function acceptRide() {
-    const rideId = currentRideId;
-    if (!rideId) {
-        addMessage('No ride to accept', 'error');
-        return;
-    }
-    
-    // Get driver ID from ride status
-    const statusDriverId = document.getElementById('statusDriverId').textContent;
-    if (!statusDriverId || statusDriverId === 'Not assigned') {
-        addMessage('No driver assigned to this ride', 'error');
-        return;
-    }
-    
-    try {
-        addMessage(`Accepting ride ${rideId}...`, 'info');
-        document.getElementById('acceptRideBtn').disabled = true;
-        document.getElementById('acceptRideBtn').textContent = 'Accepting...';
-        
-        // Extract ride ID number from rideId string (e.g., "RIDE-1234567890" -> need numeric ID)
-        // We need to get the ride details first to get the numeric ID
-        const rideResponse = await fetch(`${API_BASE_URL}/rides/${rideId}`);
-        if (!rideResponse.ok) {
-            throw new Error('Failed to fetch ride details');
+        addMessage('Could not fetch trip details. You can still try to pay using the button below.', 'warning');
+        // Show payment section anyway
+        const paymentSection = document.getElementById('paymentSection');
+        if (paymentSection) {
+            paymentSection.style.display = 'block';
+            paymentSection.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
         }
-        const ride = await rideResponse.json();
-        
-        // Extract driver ID from status or use a default
-        const driverId = statusDriverId.startsWith('DRIVER-') ? statusDriverId : `DRIVER-${statusDriverId}`;
-        
-        // Get numeric ride ID - we'll need to parse it or use the ride object
-        // For now, let's try to get the ride by ID and extract the numeric ID
-        // Actually, the API might accept the rideId string, let's check the controller
-        
-        // Try to accept with the driver ID from the matched driver
-        const response = await fetch(`${API_BASE_URL}/drivers/${driverId}/accept?rideId=${ride.id || 1}`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            }
-        });
-        
-        if (!response.ok) {
-            let errorMessage = 'Failed to accept ride';
-            try {
-                const errorData = await response.json();
-                errorMessage = errorData.error || errorData.message || errorMessage;
-            } catch (e) {
-                errorMessage = response.statusText || errorMessage;
-            }
-            throw new Error(errorMessage);
-        }
-        
-        addMessage('Ride accepted! Trip starting...', 'success');
-        document.getElementById('acceptRideSection').style.display = 'none';
-        
-        // Refresh ride status to get updated trip ID
-        if (rideId) {
-            setTimeout(() => {
-                pollRideStatus(rideId);
-            }, 1000);
-        }
-        
-    } catch (error) {
-        addMessage(`Error: ${error.message}`, 'error');
-        document.getElementById('acceptRideBtn').disabled = false;
-        document.getElementById('acceptRideBtn').textContent = 'Accept Ride';
-        console.error('Error accepting ride:', error);
+        document.getElementById('tripFare').textContent = 'N/A';
+        currentTripId = tripId;
     }
 }
 
 // Process payment
 async function processPayment() {
+    // Try to get trip ID from current ride if not set
+    if (!currentTripId && currentRideId) {
+        try {
+            const response = await fetch(`${API_BASE_URL}/rides/${currentRideId}`);
+            if (response.ok) {
+                const ride = await response.json();
+                if (ride.tripId) {
+                    currentTripId = ride.tripId;
+                }
+            }
+        } catch (e) {
+            console.error('Error fetching ride for trip ID:', e);
+        }
+    }
+    
     if (!currentTripId) {
-        addMessage('No trip available for payment', 'error');
+        addMessage('No trip available for payment. Please wait for trip to complete.', 'error');
         return;
     }
     
@@ -437,5 +355,5 @@ async function processPayment() {
 }
 
 // Initialize
-addMessage('Application loaded. Ready to request rides!', 'success');
+addMessage('Rider dashboard loaded. Ready to request rides!', 'success');
 

@@ -1,6 +1,7 @@
 package com.interview.gocomet.GoComet.DAW.service;
 
 import com.interview.gocomet.GoComet.DAW.model.Ride;
+import com.interview.gocomet.GoComet.DAW.model.RideStatus;
 import com.interview.gocomet.GoComet.DAW.model.Trip;
 import com.interview.gocomet.GoComet.DAW.model.TripStatus;
 import com.interview.gocomet.GoComet.DAW.repository.RideRepository;
@@ -98,6 +99,15 @@ public class TripService {
         
         trip.setStatus(TripStatus.COMPLETED);
         trip = tripRepository.save(trip);
+        
+        // Update ride status to COMPLETED
+        Ride ride = rideRepository.findById(trip.getRideId())
+            .orElse(null);
+        if (ride != null) {
+            ride.setStatus(RideStatus.COMPLETED);
+            rideRepository.save(ride);
+            log.info("Updated ride {} status to COMPLETED", ride.getRideId());
+        }
         
         // Release driver
         driverService.releaseDriver(trip.getDriverId());

@@ -16,7 +16,7 @@ public class RideResponse {
     private String rideId;
     private String riderId;
     private RideStatus status;
-    private Long driverId;
+    private String driverId;  // Changed to String to return driverId like "DRIVER-1" instead of numeric ID
     private Long tripId;
     private LocalDateTime createdAt;
     private LocalDateTime matchedAt;

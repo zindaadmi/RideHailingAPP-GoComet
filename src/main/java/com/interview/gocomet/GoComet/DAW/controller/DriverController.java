@@ -47,34 +47,89 @@ public class DriverController {
     }
     
     @PostMapping("/{id}/accept")
-    public ResponseEntity<Void> acceptRide(
+    public ResponseEntity<?> acceptRide(
             @PathVariable String id,
-            @RequestParam Long rideId) {
-        log.info("Driver {} accepting ride {}", id, rideId);
+            @RequestParam(required = false) Long rideId,
+            @RequestParam(required = false) String rideIdString) {
+        log.info("Driver {} accepting ride (numeric: {}, string: {})", id, rideId, rideIdString);
+        
         try {
-            driverService.acceptRide(id, rideId);
-            // Find ride by ID and update status
-            com.interview.gocomet.GoComet.DAW.model.Ride ride = rideService.getRideById(rideId);
-            if (ride != null) {
-                rideService.updateRideStatus(ride.getRideId(), 
-                    com.interview.gocomet.GoComet.DAW.model.RideStatus.ACCEPTED);
-                // Automatically start trip when driver accepts
+            com.interview.gocomet.GoComet.DAW.model.Ride ride = null;
+            Long numericRideId = null;
+            
+            // Support both numeric ID and alphanumeric rideId string
+            if (rideIdString != null && !rideIdString.isEmpty()) {
+                // Look up by alphanumeric rideId string
                 try {
-                    tripService.startTrip(rideId);
-                } catch (Exception e) {
-                    log.warn("Could not start trip automatically: {}", e.getMessage());
+                    ride = rideService.getRideEntityByRideId(rideIdString);
+                    numericRideId = ride.getId();
+                } catch (RuntimeException e) {
+                    Map<String, String> error = new HashMap<>();
+                    error.put("error", "Ride not found: " + rideIdString);
+                    return ResponseEntity.status(HttpStatus.NOT_FOUND).body(error);
                 }
+            } else if (rideId != null) {
+                // Use numeric ID directly
+                numericRideId = rideId;
+                ride = rideService.getRideById(rideId);
+            } else {
+                Map<String, String> error = new HashMap<>();
+                error.put("error", "Either rideId (numeric) or rideIdString (alphanumeric) must be provided");
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(error);
             }
+            
+            if (ride == null) {
+                Map<String, String> error = new HashMap<>();
+                error.put("error", "Ride not found");
+                return ResponseEntity.status(HttpStatus.NOT_FOUND).body(error);
+            }
+            
+            // Verify the ride is matched to this driver
+            // Get driver by driverId string to get numeric ID
+            var driverOpt = driverService.getDriver(id);
+            if (driverOpt.isEmpty()) {
+                Map<String, String> error = new HashMap<>();
+                error.put("error", "Driver not found: " + id);
+                return ResponseEntity.status(HttpStatus.NOT_FOUND).body(error);
+            }
+            
+            var driver = driverOpt.get();
+            if (ride.getDriverId() == null || !ride.getDriverId().equals(driver.getId())) {
+                Map<String, String> error = new HashMap<>();
+                error.put("error", "This ride is not matched to driver " + id);
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(error);
+            }
+            
+            // Accept the ride
+            driverService.acceptRide(id, numericRideId);
+            
+            // Update ride status
+            rideService.updateRideStatus(ride.getRideId(), 
+                com.interview.gocomet.GoComet.DAW.model.RideStatus.ACCEPTED);
+            
+            // Automatically start trip when driver accepts
+            try {
+                tripService.startTrip(numericRideId);
+            } catch (Exception e) {
+                log.warn("Could not start trip automatically: {}", e.getMessage());
+            }
+            
             return ResponseEntity.ok().build();
         } catch (IllegalStateException e) {
             log.error("Error accepting ride: {}", e.getMessage());
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST).build();
+            Map<String, String> error = new HashMap<>();
+            error.put("error", e.getMessage());
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(error);
         } catch (RuntimeException e) {
             log.error("Error accepting ride: {}", e.getMessage());
-            return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
+            Map<String, String> error = new HashMap<>();
+            error.put("error", e.getMessage());
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(error);
         } catch (Exception e) {
             log.error("Error accepting ride: {}", e.getMessage(), e);
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+            Map<String, String> error = new HashMap<>();
+            error.put("error", e.getMessage() != null ? e.getMessage() : "Failed to accept ride");
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(error);
         }
     }
     

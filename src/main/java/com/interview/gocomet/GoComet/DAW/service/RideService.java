@@ -24,6 +24,7 @@ public class RideService {
     
     private final RideRepository rideRepository;
     private final DriverMatchingService driverMatchingService;
+    private final com.interview.gocomet.GoComet.DAW.repository.DriverRepository driverRepository;
     
     /**
      * Create a new ride request with idempotency support
@@ -133,12 +134,30 @@ public class RideService {
             .orElseThrow(() -> new RuntimeException("Ride not found: " + rideId));
     }
     
+    /**
+     * Get ride entity by rideId string (for internal use)
+     */
+    @Transactional(readOnly = true)
+    public Ride getRideEntityByRideId(String rideId) {
+        return rideRepository.findByRideId(rideId)
+            .orElseThrow(() -> new RuntimeException("Ride not found: " + rideId));
+    }
+    
     private RideResponse mapToResponse(Ride ride) {
+        // Convert numeric driverId to driverId string (e.g., "DRIVER-1")
+        String driverIdString = null;
+        if (ride.getDriverId() != null) {
+            Optional<Driver> driverOpt = driverRepository.findById(ride.getDriverId());
+            if (driverOpt.isPresent()) {
+                driverIdString = driverOpt.get().getDriverId();
+            }
+        }
+        
         return RideResponse.builder()
             .rideId(ride.getRideId())
             .riderId(ride.getRiderId())
             .status(ride.getStatus())
-            .driverId(ride.getDriverId())
+            .driverId(driverIdString)  // Return driverId string instead of numeric ID
             .tripId(ride.getTripId())
             .createdAt(ride.getCreatedAt())
             .matchedAt(ride.getMatchedAt())

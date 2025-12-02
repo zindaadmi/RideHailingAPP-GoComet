@@ -3,19 +3,18 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>GoComet DAW - Ride Hailing Application</title>
+    <title>GoComet DAW - Rider Dashboard</title>
     <link rel="stylesheet" href="styles.css">
 </head>
 <body>
     <div class="container">
         <header>
-            <h1>🚗 GoComet DAW</h1>
-            <p class="subtitle">Ride Hailing Platform</p>
+            <h1>🚗 GoComet DAW - Rider</h1>
+            <p class="subtitle">Request and Track Your Rides</p>
             <nav style="margin-top: 10px;">
-                <a href="/rider.html" style="margin-right: 15px; color: #007bff; text-decoration: none; font-weight: bold;">👤 Rider Dashboard</a>
-                <a href="/driver.html" style="color: #007bff; text-decoration: none; font-weight: bold;">🚕 Driver Dashboard</a>
+                <a href="/" style="margin-right: 15px; color: #007bff;">Home</a>
+                <a href="/driver.html" style="color: #007bff;">Driver Dashboard</a>
             </nav>
-            <p style="margin-top: 10px; color: #666; font-size: 0.9em;">This is the combined dashboard. Use the links above for dedicated dashboards.</p>
         </header>
 
         <div class="main-content">
@@ -104,49 +103,39 @@
                             <span class="value" id="statusMatchedAt">-</span>
                         </div>
                     </div>
-                    <div id="tripActions" style="display: none; margin-top: 15px;">
-                        <button class="btn btn-primary" onclick="endTrip()" id="endTripBtn">End Trip</button>
+                    
+                    <!-- Ride ID Display (for manual copying) -->
+                    <div id="rideIdCopySection" style="margin-top: 15px; padding: 15px; background: #e3f2fd; border-radius: 5px; border: 2px solid #2196f3;">
+                        <p style="margin-bottom: 10px; color: #1976d2; font-weight: bold; font-size: 1.1em;">
+                            📋 <strong>Driver Matched!</strong> Copy this Ride ID and give it to the driver:
+                        </p>
+                        <input type="text" id="rideIdToCopy" readonly 
+                            style="width: 100%; padding: 10px; border: 2px solid #2196f3; border-radius: 4px; font-family: monospace; font-size: 1.2em; background: white; font-weight: bold; color: #1976d2; cursor: text;" 
+                            value="">
+                        <p style="margin-top: 10px; color: #666; font-size: 0.9em;">
+                            ⚠️ <strong>Important:</strong> Select and copy the Ride ID above (Ctrl+C or Cmd+C), then give it to the driver to accept in the Driver Dashboard.
+                        </p>
                     </div>
-                    <div id="acceptRideSection" style="display: none; margin-top: 15px;">
-                        <p style="margin-bottom: 10px; color: #666;">Driver matched! Accept the ride to start the trip:</p>
-                        <button class="btn btn-primary" onclick="acceptRide()" id="acceptRideBtn">Accept Ride</button>
-                    </div>
+                    
+                    <!-- Payment Section (shown when trip is completed) -->
                     <div id="paymentSection" style="display: none; margin-top: 15px;">
-                        <div class="status-item" style="background: #e8f5e9; padding: 15px; border-radius: 5px;">
+                        <div class="status-item" style="background: #e8f5e9; padding: 15px; border-radius: 5px; border: 2px solid #4caf50;">
                             <div style="margin-bottom: 10px;">
-                                <strong>Trip Completed!</strong>
+                                <strong style="font-size: 1.2em; color: #2e7d32;">✅ Trip Completed!</strong>
                             </div>
-                            <div class="status-item">
-                                <span class="label">Total Fare:</span>
-                                <span class="value" id="tripFare" style="font-size: 1.2em; color: #2e7d32; font-weight: bold;">-</span>
+                            <div class="status-item" style="margin-bottom: 15px;">
+                                <span class="label" style="font-weight: bold;">Total Fare:</span>
+                                <span class="value" id="tripFare" style="font-size: 1.5em; color: #2e7d32; font-weight: bold;">-</span>
                             </div>
-                            <button class="btn btn-primary" onclick="processPayment()" id="payBtn" style="margin-top: 10px; width: 100%;">Pay Now</button>
+                            <button class="btn btn-primary" onclick="processPayment()" id="payBtn" style="margin-top: 10px; width: 100%; padding: 12px; font-size: 1.1em; font-weight: bold;">💳 Pay Now</button>
+                            <p style="margin-top: 10px; color: #666; font-size: 0.9em; text-align: center;">
+                                Click "Pay Now" to complete your payment
+                            </p>
                         </div>
                     </div>
+                    
                     <button class="btn btn-secondary" onclick="stopPolling()" style="margin-top: 10px;">Stop Tracking</button>
                 </div>
-            </section>
-
-            <!-- Driver Location Update Section -->
-            <section class="card">
-                <h2>Driver Location Update</h2>
-                <form id="driverLocationForm">
-                    <div class="form-group">
-                        <label for="driverId">Driver ID:</label>
-                        <input type="text" id="driverId" value="DRIVER-1" required>
-                    </div>
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label for="driverLat">Latitude:</label>
-                            <input type="number" id="driverLat" value="28.7041" step="0.0001" required>
-                        </div>
-                        <div class="form-group">
-                            <label for="driverLng">Longitude:</label>
-                            <input type="number" id="driverLng" value="77.1025" step="0.0001" required>
-                        </div>
-                    </div>
-                    <button type="submit" class="btn btn-primary">Update Location</button>
-                </form>
             </section>
 
             <!-- Messages Section -->
@@ -157,7 +146,7 @@
         </div>
     </div>
 
-    <script src="app.js"></script>
+    <script src="rider.js"></script>
 </body>
 </html>
 
