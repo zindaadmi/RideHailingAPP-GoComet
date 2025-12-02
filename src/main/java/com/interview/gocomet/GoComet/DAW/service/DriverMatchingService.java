@@ -23,6 +23,9 @@ public class DriverMatchingService {
     private static final double EARTH_RADIUS_KM = 6371.0;
     private static final int MAX_DRIVERS_TO_CHECK = 50;
     
+    // Static counter for round-robin driver selection
+    private static volatile int driverRotationCounter = 0;
+    
     private final DriverRepository driverRepository;
     private final RedisTemplate<String, Object> redisTemplate;
     
@@ -57,6 +60,7 @@ public class DriverMatchingService {
     /**
      * Match a driver to a ride request
      * Uses optimistic locking to prevent race conditions
+     * Implements round-robin selection for fair driver distribution
      */
     @Transactional
     @CacheEvict(value = "availableDrivers", allEntries = true)
@@ -68,22 +72,67 @@ public class DriverMatchingService {
             return null;
         }
         
-        // Try to assign the closest available driver
-        for (Driver driver : candidates) {
+        // Sort candidates by driverId for consistent ordering
+        candidates.sort((d1, d2) -> d1.getDriverId().compareTo(d2.getDriverId()));
+        
+        // Get all available drivers for round-robin
+        List<Driver> allAvailable = driverRepository.findByStatus(DriverStatus.AVAILABLE);
+        allAvailable.sort((d1, d2) -> d1.getDriverId().compareTo(d2.getDriverId()));
+        
+        // Filter candidates to only include those that are actually available
+        List<Driver> availableCandidates = candidates.stream()
+            .filter(c -> allAvailable.stream()
+                .anyMatch(a -> a.getId().equals(c.getId())))
+            .collect(Collectors.toList());
+        
+        if (availableCandidates.isEmpty()) {
+            availableCandidates = candidates; // Fallback to all candidates
+        }
+        
+        // Round-robin: Use counter to select different driver each time
+        Driver selectedDriver = null;
+        if (!availableCandidates.isEmpty()) {
+            int index = driverRotationCounter % availableCandidates.size();
+            selectedDriver = availableCandidates.get(index);
+            driverRotationCounter++; // Increment for next time
+            log.debug("Round-robin selection: index {} of {} candidates", index, availableCandidates.size());
+        }
+        
+        // Try to assign the selected driver
+        if (selectedDriver != null) {
             try {
                 // Use optimistic locking - check if driver is still available
+                Driver currentDriver = driverRepository.findById(selectedDriver.getId())
+                    .orElse(null);
+                
+                if (currentDriver != null && currentDriver.getStatus() == DriverStatus.AVAILABLE) {
+                    currentDriver.setStatus(DriverStatus.ASSIGNED);
+                    currentDriver = driverRepository.save(currentDriver);
+                    log.info("Matched driver {} to ride request (round-robin: {}/{})", 
+                        currentDriver.getDriverId(), 
+                        allAvailable.indexOf(selectedDriver) + 1, 
+                        allAvailable.size());
+                    return currentDriver;
+                }
+            } catch (Exception e) {
+                log.warn("Failed to assign driver {}: {}", selectedDriver.getDriverId(), e.getMessage());
+            }
+        }
+        
+        // Fallback: try all candidates in order
+        for (Driver driver : candidates) {
+            try {
                 Driver currentDriver = driverRepository.findById(driver.getId())
                     .orElse(null);
                 
                 if (currentDriver != null && currentDriver.getStatus() == DriverStatus.AVAILABLE) {
                     currentDriver.setStatus(DriverStatus.ASSIGNED);
                     currentDriver = driverRepository.save(currentDriver);
-                    log.info("Matched driver {} to ride request", currentDriver.getDriverId());
+                    log.info("Matched driver {} to ride request (fallback)", currentDriver.getDriverId());
                     return currentDriver;
                 }
             } catch (Exception e) {
                 log.warn("Failed to assign driver {}: {}", driver.getDriverId(), e.getMessage());
-                // Continue to next candidate
             }
         }
         

@@ -14,8 +14,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -24,7 +26,7 @@ public class RideService {
     
     private final RideRepository rideRepository;
     private final DriverMatchingService driverMatchingService;
-    private final com.interview.gocomet.GoComet.DAW.repository.DriverRepository driverRepository;
+    private final DriverService driverService;
     
     /**
      * Create a new ride request with idempotency support
@@ -142,12 +144,26 @@ public class RideService {
         return rideRepository.findByRideId(rideId)
             .orElseThrow(() -> new RuntimeException("Ride not found: " + rideId));
     }
-    
+
+    /**
+     * Get all active rides (not completed or cancelled)
+     */
+    @Transactional(readOnly = true)
+    public List<RideResponse> getActiveRides() {
+        List<Ride> activeRides = rideRepository.findAll().stream()
+            .filter(ride -> ride.getStatus() != RideStatus.COMPLETED && ride.getStatus() != RideStatus.CANCELLED)
+            .collect(Collectors.toList());
+        
+        return activeRides.stream()
+            .map(this::mapToResponse)
+            .collect(Collectors.toList());
+    }
+
     private RideResponse mapToResponse(Ride ride) {
         // Convert numeric driverId to driverId string (e.g., "DRIVER-1")
         String driverIdString = null;
         if (ride.getDriverId() != null) {
-            Optional<Driver> driverOpt = driverRepository.findById(ride.getDriverId());
+            Optional<Driver> driverOpt = driverService.getDriverById(ride.getDriverId());
             if (driverOpt.isPresent()) {
                 driverIdString = driverOpt.get().getDriverId();
             }

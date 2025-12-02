@@ -105,5 +105,9 @@ public class DriverService {
     public Optional<Driver> getDriver(String driverId) {
         return driverRepository.findByDriverId(driverId);
     }
+    
+    public Optional<Driver> getDriverById(Long id) {
+        return driverRepository.findById(id);
+    }
 }
 

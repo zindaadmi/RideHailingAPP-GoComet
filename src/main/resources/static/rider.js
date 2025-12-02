@@ -25,8 +25,11 @@ function addMessage(message, type = 'info') {
 }
 
 // Handle ride form submission
-document.getElementById('rideForm').addEventListener('submit', async (e) => {
-    e.preventDefault();
+document.addEventListener('DOMContentLoaded', () => {
+    const rideForm = document.getElementById('rideForm');
+    if (rideForm) {
+        rideForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
     
     const rideData = {
         riderId: document.getElementById('riderId').value,
@@ -64,11 +67,32 @@ document.getElementById('rideForm').addEventListener('submit', async (e) => {
         const ride = await response.json();
         currentRideId = ride.rideId;
         
-        addMessage(`Ride created successfully! Ride ID: ${ride.rideId}`, 'success');
+        // Clear old payment success section if visible
+        const paymentSuccessSection = document.getElementById('paymentSuccessSection');
+        if (paymentSuccessSection) {
+            paymentSuccessSection.style.display = 'none';
+        }
+        
+        // Clear old payment section if visible
+        const paymentSection = document.getElementById('paymentSection');
+        if (paymentSection) {
+            paymentSection.style.display = 'none';
+        }
+        
+        // Clear activity log and show only new ride messages
+        const messagesDiv = document.getElementById('messages');
+        if (messagesDiv) {
+            messagesDiv.innerHTML = '';
+        }
+        
+        addMessage(`✅ Ride created successfully! Ride ID: ${ride.rideId}`, 'success');
         addMessage(`Status: ${ride.status}${ride.driverId ? ` | Driver ID: ${ride.driverId}` : ''}`, 'info');
         
         // Show ride status section
-        document.getElementById('rideStatusSection').style.display = 'block';
+        const rideStatusSection = document.getElementById('rideStatusSection');
+        if (rideStatusSection) {
+            rideStatusSection.style.display = 'block';
+        }
         updateRideStatus(ride);
         
         // Start polling for status updates
@@ -78,6 +102,14 @@ document.getElementById('rideForm').addEventListener('submit', async (e) => {
         addMessage(`Error: ${error.message}`, 'error');
         console.error('Error creating ride:', error);
     }
+        });
+    }
+    
+    // Make functions globally accessible after DOM is loaded
+    window.clearOldRideInfo = clearOldRideInfo;
+    window.processPayment = processPayment;
+    
+    addMessage('Rider dashboard loaded. Ready to request rides!', 'success');
 });
 
 // Update ride status display
@@ -219,12 +251,75 @@ function startPolling(rideId) {
     addMessage('Started tracking ride status...', 'info');
 }
 
-// Stop polling
+// Stop polling (internal function, no longer exposed)
 function stopPolling() {
     if (pollingInterval) {
         clearInterval(pollingInterval);
         pollingInterval = null;
-        addMessage('Stopped tracking ride status.', 'info');
+    }
+}
+
+// Clear old ride information and reset form
+function clearOldRideInfo() {
+    try {
+        // Reset current ride/trip IDs
+        currentRideId = null;
+        currentTripId = null;
+        
+        // Stop any active polling
+        if (pollingInterval) {
+            clearInterval(pollingInterval);
+            pollingInterval = null;
+        }
+        
+        // Hide ride status section completely
+        const rideStatusSection = document.getElementById('rideStatusSection');
+        if (rideStatusSection) {
+            rideStatusSection.style.display = 'none';
+        }
+        
+        // Hide all payment sections
+        const paymentSection = document.getElementById('paymentSection');
+        if (paymentSection) {
+            paymentSection.style.display = 'none';
+        }
+        
+        const paymentSuccessSection = document.getElementById('paymentSuccessSection');
+        if (paymentSuccessSection) {
+            paymentSuccessSection.style.display = 'none';
+        }
+        
+        // Clear ALL activity log messages
+        const messagesDiv = document.getElementById('messages');
+        if (messagesDiv) {
+            messagesDiv.innerHTML = '';
+        }
+        
+        // Reset form
+        const rideForm = document.getElementById('rideForm');
+        if (rideForm) {
+            rideForm.reset();
+            // Set default values safely
+            const riderIdInput = document.getElementById('riderId');
+            const pickupLatInput = document.getElementById('pickupLat');
+            const pickupLngInput = document.getElementById('pickupLng');
+            const destLatInput = document.getElementById('destLat');
+            const destLngInput = document.getElementById('destLng');
+            
+            if (riderIdInput) riderIdInput.value = 'RIDER-1';
+            if (pickupLatInput) pickupLatInput.value = '28.7041';
+            if (pickupLngInput) pickupLngInput.value = '77.1025';
+            if (destLatInput) destLatInput.value = '28.5355';
+            if (destLngInput) destLngInput.value = '77.3910';
+        }
+        
+        // Add a fresh message
+        addMessage('✅ Ready for a new ride! Fill in the form above to request a new ride.', 'success');
+        
+        // Scroll to top to show the form
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    } catch (error) {
+        console.error('Error clearing old ride info:', error);
     }
 }
 
@@ -275,6 +370,85 @@ async function fetchTripDetails(tripId) {
         }
         document.getElementById('tripFare').textContent = 'N/A';
         currentTripId = tripId;
+    }
+}
+
+// Handle payment success
+function handlePaymentSuccess(payment) {
+    // Stop polling immediately
+    if (pollingInterval) {
+        clearInterval(pollingInterval);
+        pollingInterval = null;
+    }
+    
+    // Reset current ride/trip IDs
+    currentRideId = null;
+    currentTripId = null;
+    
+    // Hide ride status section immediately
+    const rideStatusSection = document.getElementById('rideStatusSection');
+    if (rideStatusSection) {
+        rideStatusSection.style.display = 'none';
+    }
+    
+    // Hide payment section and show success section
+    const paymentSection = document.getElementById('paymentSection');
+    if (paymentSection) {
+        paymentSection.style.display = 'none';
+    }
+    
+    const paymentSuccessSection = document.getElementById('paymentSuccessSection');
+    if (paymentSuccessSection) {
+        paymentSuccessSection.style.display = 'block';
+        
+        // Update success section with payment details
+        const tripFareElement = document.getElementById('tripFare');
+        const fareAmount = payment.amount?.toFixed(2) || (tripFareElement ? tripFareElement.textContent.replace('₹', '') : '0.00');
+        document.getElementById('paidAmount').textContent = `₹${fareAmount}`;
+        document.getElementById('transactionId').textContent = payment.pspTransactionId || payment.paymentId || 'N/A';
+    }
+    
+    // Clear ALL old activity log messages and show only payment success
+    const messagesDiv = document.getElementById('messages');
+    if (messagesDiv) {
+        messagesDiv.innerHTML = ''; // Clear all messages
+    }
+    
+    // Add only the payment success message
+    addMessage(`✅ Payment successful! Transaction ID: ${payment.pspTransactionId || payment.paymentId}`, 'success');
+    
+    // Reset form
+    const rideForm = document.getElementById('rideForm');
+    if (rideForm) {
+        rideForm.reset();
+        // Set default values
+        const riderIdInput = document.getElementById('riderId');
+        const pickupLatInput = document.getElementById('pickupLat');
+        const pickupLngInput = document.getElementById('pickupLng');
+        const destLatInput = document.getElementById('destLat');
+        const destLngInput = document.getElementById('destLng');
+        
+        if (riderIdInput) riderIdInput.value = 'RIDER-1';
+        if (pickupLatInput) pickupLatInput.value = '28.7041';
+        if (pickupLngInput) pickupLngInput.value = '77.1025';
+        if (destLatInput) destLatInput.value = '28.5355';
+        if (destLngInput) destLngInput.value = '77.3910';
+    }
+    
+    // Scroll to success section
+    if (paymentSuccessSection) {
+        paymentSuccessSection.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+}
+
+// Handle payment failure
+function handlePaymentFailure(payment) {
+    addMessage(`❌ Payment failed. Please try again.`, 'error');
+    const payBtn = document.getElementById('payBtn');
+    if (payBtn) {
+        payBtn.disabled = false;
+        payBtn.textContent = '💳 Pay Now';
+        payBtn.style.background = '';
     }
 }
 
@@ -331,19 +505,17 @@ async function processPayment() {
         
         const payment = await response.json();
         
+        // Handle payment response - payment now returns SUCCESS directly
         if (payment.status === 'SUCCESS') {
-            addMessage(`Payment successful! Transaction ID: ${payment.pspTransactionId || payment.paymentId}`, 'success');
-            document.getElementById('payBtn').textContent = 'Payment Successful ✓';
-            document.getElementById('payBtn').style.background = '#28a745';
-            document.getElementById('payBtn').disabled = true;
+            handlePaymentSuccess(payment);
         } else if (payment.status === 'FAILED') {
-            addMessage(`Payment failed. Please try again.`, 'error');
-            document.getElementById('payBtn').disabled = false;
-            document.getElementById('payBtn').textContent = 'Pay Now';
+            handlePaymentFailure(payment);
         } else {
-            addMessage(`Payment status: ${payment.status}`, 'info');
+            // Handle any other status (shouldn't happen, but just in case)
+            addMessage(`⚠️ Payment status: ${payment.status}`, 'info');
             document.getElementById('payBtn').disabled = false;
-            document.getElementById('payBtn').textContent = 'Pay Now';
+            document.getElementById('payBtn').textContent = '💳 Pay Now';
+            document.getElementById('payBtn').style.background = '';
         }
         
     } catch (error) {
@@ -354,6 +526,4 @@ async function processPayment() {
     }
 }
 
-// Initialize
-addMessage('Rider dashboard loaded. Ready to request rides!', 'success');
 

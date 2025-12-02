@@ -53,5 +53,19 @@ public class RideController {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(error);
         }
     }
+    
+    @GetMapping("/active")
+    public ResponseEntity<?> getActiveRides() {
+        log.info("Getting all active rides");
+        try {
+            java.util.List<RideResponse> activeRides = rideService.getActiveRides();
+            return ResponseEntity.ok(activeRides);
+        } catch (Exception e) {
+            log.error("Error getting active rides: {}", e.getMessage(), e);
+            Map<String, String> error = new HashMap<>();
+            error.put("error", e.getMessage() != null ? e.getMessage() : "Failed to get active rides");
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(error);
+        }
+    }
 }
 

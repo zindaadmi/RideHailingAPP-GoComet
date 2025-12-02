@@ -134,7 +134,28 @@
                         </div>
                     </div>
                     
-                    <button class="btn btn-secondary" onclick="stopPolling()" style="margin-top: 10px;">Stop Tracking</button>
+                    <!-- Payment Success Section (shown after successful payment) -->
+                    <div id="paymentSuccessSection" style="display: none; margin-top: 15px;">
+                        <div class="status-item" style="background: #d4edda; padding: 15px; border-radius: 5px; border: 2px solid #28a745;">
+                            <div style="margin-bottom: 10px; text-align: center;">
+                                <strong style="font-size: 1.3em; color: #155724;">✅ Payment Successful!</strong>
+                            </div>
+                            <div class="status-item" style="margin-bottom: 10px;">
+                                <span class="label" style="font-weight: bold;">Amount Paid:</span>
+                                <span class="value" id="paidAmount" style="font-size: 1.3em; color: #155724; font-weight: bold;">-</span>
+                            </div>
+                            <div class="status-item" style="margin-bottom: 10px;">
+                                <span class="label" style="font-weight: bold;">Transaction ID:</span>
+                                <span class="value" id="transactionId" style="font-family: monospace; color: #155724;">-</span>
+                            </div>
+                            <p style="margin-top: 15px; color: #155724; font-size: 0.95em; text-align: center; font-weight: bold;">
+                                🎉 Thank you for using GoComet DAW!
+                            </p>
+                            <button class="btn btn-primary" onclick="clearOldRideInfo()" style="margin-top: 15px; width: 100%; padding: 10px; font-size: 1em;">
+                                🚗 Request New Ride
+                            </button>
+                        </div>
+                    </div>
                 </div>
             </section>
 

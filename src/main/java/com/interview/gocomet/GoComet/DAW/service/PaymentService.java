@@ -33,19 +33,29 @@ public class PaymentService {
      */
     @Transactional
     public PaymentResponse processPayment(PaymentRequest request) {
-        // Check idempotency
-        if (request.getIdempotencyKey() != null) {
-            // In a real implementation, check idempotency key in a separate table
-            // For now, we'll check if payment already exists for this trip
-            Optional<Payment> existingPayment = paymentRepository.findByTripId(request.getTripId())
-                .stream()
-                .filter(p -> p.getStatus() == PaymentStatus.SUCCESS)
-                .findFirst();
-            
-            if (existingPayment.isPresent()) {
-                log.info("Payment already processed for trip {}", request.getTripId());
-                return mapToResponse(existingPayment.get());
+        // Check if payment already exists for this trip (any status)
+        Optional<Payment> existingPayment = paymentRepository.findByTripId(request.getTripId())
+            .stream()
+            .findFirst();
+        
+        if (existingPayment.isPresent()) {
+            Payment existing = existingPayment.get();
+            // If already successful, return it
+            if (existing.getStatus() == PaymentStatus.SUCCESS) {
+                log.info("Payment already processed successfully for trip {}", request.getTripId());
+                return mapToResponse(existing);
             }
+            // If in PROCESSING or PENDING, complete it now
+            if (existing.getStatus() == PaymentStatus.PROCESSING || existing.getStatus() == PaymentStatus.PENDING) {
+                log.info("Completing existing payment {} for trip {}", existing.getPaymentId(), request.getTripId());
+                existing.setStatus(PaymentStatus.SUCCESS);
+                existing.setPspTransactionId("PSP-" + UUID.randomUUID().toString());
+                existing.setPspResponse("Payment successful");
+                existing.setCompletedAt(LocalDateTime.now());
+                existing = paymentRepository.save(existing);
+                return mapToResponse(existing);
+            }
+            // If failed, create a new one
         }
         
         // Get trip details
@@ -60,45 +70,24 @@ public class PaymentService {
         Ride ride = rideRepository.findById(trip.getRideId())
             .orElseThrow(() -> new RuntimeException("Ride not found: " + trip.getRideId()));
         
-        // Create payment record
+        // Create payment record and process immediately
         Payment payment = Payment.builder()
             .paymentId("PAY-" + UUID.randomUUID().toString())
             .tripId(request.getTripId())
             .riderId(trip.getRiderId())
             .amount(trip.getTotalFare())
             .paymentMethod(ride.getPaymentMethod())
-            .status(PaymentStatus.PENDING)
+            .status(PaymentStatus.SUCCESS) // Set to SUCCESS immediately
+            .pspTransactionId("PSP-" + UUID.randomUUID().toString())
+            .pspResponse("Payment successful")
+            .completedAt(LocalDateTime.now())
             .build();
         
-        payment = paymentRepository.save(payment);
+        // Simulate PSP call (no delay needed, just for logging)
+        callPaymentServiceProvider(payment);
         
-        // Process payment with external PSP (simulated)
-        try {
-            payment.setStatus(PaymentStatus.PROCESSING);
-            payment = paymentRepository.save(payment);
-            
-            // Simulate PSP call
-            boolean paymentSuccess = callPaymentServiceProvider(payment);
-            
-            if (paymentSuccess) {
-                payment.setStatus(PaymentStatus.SUCCESS);
-                payment.setPspTransactionId("PSP-" + UUID.randomUUID().toString());
-                payment.setPspResponse("Payment successful");
-                payment.setCompletedAt(LocalDateTime.now());
-                log.info("Payment {} successful for trip {}", payment.getPaymentId(), request.getTripId());
-            } else {
-                payment.setStatus(PaymentStatus.FAILED);
-                payment.setPspResponse("Payment failed");
-                log.warn("Payment {} failed for trip {}", payment.getPaymentId(), request.getTripId());
-            }
-            
-            payment = paymentRepository.save(payment);
-        } catch (Exception e) {
-            payment.setStatus(PaymentStatus.FAILED);
-            payment.setPspResponse("Error: " + e.getMessage());
-            payment = paymentRepository.save(payment);
-            log.error("Error processing payment {}: {}", payment.getPaymentId(), e.getMessage(), e);
-        }
+        payment = paymentRepository.save(payment);
+        log.info("Payment {} successful for trip {} - amount: {}", payment.getPaymentId(), request.getTripId(), payment.getAmount());
         
         return mapToResponse(payment);
     }
@@ -108,15 +97,10 @@ public class PaymentService {
      * In production, this would call actual payment gateway
      */
     private boolean callPaymentServiceProvider(Payment payment) {
-        // Simulate network delay
-        try {
-            Thread.sleep(100);
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-        }
-        
-        // Simulate 95% success rate
-        return Math.random() > 0.05;
+        // No delay - payment completes immediately
+        // In production, this would call actual payment gateway
+        log.debug("Processing payment {} via PSP", payment.getPaymentId());
+        return true;
     }
     
     /**
