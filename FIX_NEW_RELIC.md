@@ -29,8 +29,7 @@ pkill -f GoCometDawApplication
 license_key: YOUR_ACTUAL_LICENSE_KEY_HERE
 ```
 
-**Current key in file:** `eu01xxf4dbb745300ae0460fa4951fd4FFFFNRAL`  
-**Replace with:** Your actual key from New Relic account
+**Replace with:** Your actual license key from New Relic account (starts with `eu01` for EU region)
 
 ### Step 3: Start Application WITH New Relic Agent
 
