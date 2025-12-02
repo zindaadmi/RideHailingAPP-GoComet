@@ -65,7 +65,10 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         
         const ride = await response.json();
+        
+        // IMPORTANT: Clear old trip/ride IDs when creating a new ride
         currentRideId = ride.rideId;
+        currentTripId = null; // Clear old trip ID
         
         // Clear old payment success section if visible
         const paymentSuccessSection = document.getElementById('paymentSuccessSection');
@@ -454,6 +457,12 @@ function handlePaymentFailure(payment) {
 
 // Process payment
 async function processPayment() {
+    const payBtn = document.getElementById('payBtn');
+    if (!payBtn) {
+        addMessage('Payment button not found', 'error');
+        return;
+    }
+    
     // Try to get trip ID from current ride if not set
     if (!currentTripId && currentRideId) {
         try {
@@ -462,10 +471,15 @@ async function processPayment() {
                 const ride = await response.json();
                 if (ride.tripId) {
                     currentTripId = ride.tripId;
+                } else {
+                    addMessage('Trip has not started yet. Please wait for driver to accept and start the trip.', 'error');
+                    return;
                 }
             }
         } catch (e) {
             console.error('Error fetching ride for trip ID:', e);
+            addMessage('Error fetching trip information. Please try again.', 'error');
+            return;
         }
     }
     
@@ -476,12 +490,13 @@ async function processPayment() {
     
     try {
         addMessage(`Processing payment for trip ${currentTripId}...`, 'info');
-        document.getElementById('payBtn').disabled = true;
-        document.getElementById('payBtn').textContent = 'Processing...';
+        payBtn.disabled = true;
+        payBtn.textContent = 'Processing...';
         
+        // Use unique idempotency key with trip ID to avoid conflicts
         const paymentData = {
             tripId: currentTripId,
-            idempotencyKey: `payment-${Date.now()}`
+            idempotencyKey: `payment-${currentTripId}-${Date.now()}`
         };
         
         const response = await fetch(`${API_BASE_URL}/payments`, {
@@ -505,25 +520,132 @@ async function processPayment() {
         
         const payment = await response.json();
         
-        // Handle payment response - payment now returns SUCCESS directly
+        // Handle payment response - payment should return SUCCESS directly
         if (payment.status === 'SUCCESS') {
             handlePaymentSuccess(payment);
         } else if (payment.status === 'FAILED') {
             handlePaymentFailure(payment);
+        } else if (payment.status === 'PROCESSING') {
+            // If somehow PROCESSING is returned, wait and check again
+            addMessage('Payment is processing, checking status...', 'info');
+            setTimeout(async () => {
+                try {
+                    const checkResponse = await fetch(`${API_BASE_URL}/payments/${payment.paymentId}`);
+                    if (checkResponse.ok) {
+                        const updatedPayment = await checkResponse.json();
+                        if (updatedPayment.status === 'SUCCESS') {
+                            handlePaymentSuccess(updatedPayment);
+                        } else {
+                            handlePaymentFailure(updatedPayment);
+                        }
+                    } else {
+                        handlePaymentFailure(payment);
+                    }
+                } catch (e) {
+                    handlePaymentFailure(payment);
+                }
+            }, 500);
         } else {
-            // Handle any other status (shouldn't happen, but just in case)
-            addMessage(`⚠️ Payment status: ${payment.status}`, 'info');
-            document.getElementById('payBtn').disabled = false;
-            document.getElementById('payBtn').textContent = '💳 Pay Now';
-            document.getElementById('payBtn').style.background = '';
+            // Handle any other status
+            addMessage(`⚠️ Payment status: ${payment.status}. Please try again.`, 'warning');
+            payBtn.disabled = false;
+            payBtn.textContent = '💳 Pay Now';
+            payBtn.style.background = '';
         }
         
     } catch (error) {
         addMessage(`Error: ${error.message}`, 'error');
-        document.getElementById('payBtn').disabled = false;
-        document.getElementById('payBtn').textContent = 'Pay Now';
+        payBtn.disabled = false;
+        payBtn.textContent = '💳 Pay Now';
+        payBtn.style.background = '';
         console.error('Error processing payment:', error);
     }
 }
 
+// Fetch and display active rides
+async function fetchActiveRides() {
+    try {
+        const response = await fetch(`${API_BASE_URL}/rides/active`);
+        if (!response.ok) {
+            throw new Error('Failed to fetch active rides');
+        }
+        
+        const rides = await response.json();
+        displayActiveRides(rides);
+    } catch (error) {
+        console.error('Error fetching active rides:', error);
+        const container = document.getElementById('activeRidesContainer');
+        if (container) {
+            container.innerHTML = '<p style="color: #dc3545;">Error loading active rides</p>';
+        }
+    }
+}
+
+// Display active rides
+function displayActiveRides(rides) {
+    const container = document.getElementById('activeRidesContainer');
+    if (!container) return;
+    
+    if (rides.length === 0) {
+        container.innerHTML = '<p style="color: #666; text-align: center;">No active rides at the moment</p>';
+        return;
+    }
+    
+    let html = '<div style="display: grid; gap: 15px;">';
+    
+    rides.forEach(ride => {
+        const statusColor = {
+            'PENDING': '#ffc107',
+            'MATCHED': '#17a2b8',
+            'ACCEPTED': '#28a745',
+            'IN_PROGRESS': '#007bff',
+            'COMPLETED': '#6c757d',
+            'CANCELLED': '#dc3545'
+        }[ride.status] || '#6c757d';
+        
+        html += `
+            <div style="border: 1px solid #ddd; border-radius: 8px; padding: 15px; background: #f8f9fa;">
+                <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 10px;">
+                    <div>
+                        <strong style="font-size: 1.1em; color: #333;">${ride.rideId}</strong>
+                        <span style="background: ${statusColor}; color: white; padding: 4px 8px; border-radius: 4px; font-size: 0.85em; margin-left: 10px;">
+                            ${ride.status}
+                        </span>
+                    </div>
+                </div>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-size: 0.9em;">
+                    <div><strong>Rider:</strong> ${ride.riderId}</div>
+                    <div><strong>Driver:</strong> ${ride.driverId || 'Not assigned'}</div>
+                    <div><strong>Trip ID:</strong> ${ride.tripId || '-'}</div>
+                    <div><strong>Created:</strong> ${ride.createdAt ? new Date(ride.createdAt).toLocaleString() : '-'}</div>
+                    ${ride.matchedAt ? `<div><strong>Matched:</strong> ${new Date(ride.matchedAt).toLocaleString()}</div>` : ''}
+                    ${ride.acceptedAt ? `<div><strong>Accepted:</strong> ${new Date(ride.acceptedAt).toLocaleString()}</div>` : ''}
+                </div>
+            </div>
+        `;
+    });
+    
+    html += '</div>';
+    container.innerHTML = html;
+}
+
+// Auto-refresh active rides every 3 seconds
+let activeRidesInterval = null;
+
+function startActiveRidesPolling() {
+    // Fetch immediately
+    fetchActiveRides();
+    
+    // Then fetch every 3 seconds
+    activeRidesInterval = setInterval(() => {
+        fetchActiveRides();
+    }, 3000);
+}
+
+// Initialize active rides polling when page loads
+document.addEventListener('DOMContentLoaded', () => {
+    if (document.getElementById('activeRidesContainer')) {
+        startActiveRidesPolling();
+    }
+});
 

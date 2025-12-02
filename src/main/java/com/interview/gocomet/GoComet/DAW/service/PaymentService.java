@@ -33,29 +33,33 @@ public class PaymentService {
      */
     @Transactional
     public PaymentResponse processPayment(PaymentRequest request) {
-        // Check if payment already exists for this trip (any status)
-        Optional<Payment> existingPayment = paymentRepository.findByTripId(request.getTripId())
+        // Check if payment already exists for this trip with SUCCESS status
+        Optional<Payment> existingSuccessPayment = paymentRepository.findByTripId(request.getTripId())
             .stream()
+            .filter(p -> p.getStatus() == PaymentStatus.SUCCESS)
             .findFirst();
         
-        if (existingPayment.isPresent()) {
-            Payment existing = existingPayment.get();
-            // If already successful, return it
-            if (existing.getStatus() == PaymentStatus.SUCCESS) {
-                log.info("Payment already processed successfully for trip {}", request.getTripId());
-                return mapToResponse(existing);
-            }
-            // If in PROCESSING or PENDING, complete it now
-            if (existing.getStatus() == PaymentStatus.PROCESSING || existing.getStatus() == PaymentStatus.PENDING) {
-                log.info("Completing existing payment {} for trip {}", existing.getPaymentId(), request.getTripId());
-                existing.setStatus(PaymentStatus.SUCCESS);
-                existing.setPspTransactionId("PSP-" + UUID.randomUUID().toString());
-                existing.setPspResponse("Payment successful");
-                existing.setCompletedAt(LocalDateTime.now());
-                existing = paymentRepository.save(existing);
-                return mapToResponse(existing);
-            }
-            // If failed, create a new one
+        if (existingSuccessPayment.isPresent()) {
+            log.info("Payment already processed successfully for trip {}", request.getTripId());
+            return mapToResponse(existingSuccessPayment.get());
+        }
+        
+        // If there's a failed payment, we can create a new one
+        // But if there's PROCESSING/PENDING, complete it first
+        Optional<Payment> existingIncompletePayment = paymentRepository.findByTripId(request.getTripId())
+            .stream()
+            .filter(p -> p.getStatus() == PaymentStatus.PROCESSING || p.getStatus() == PaymentStatus.PENDING)
+            .findFirst();
+        
+        if (existingIncompletePayment.isPresent()) {
+            Payment existing = existingIncompletePayment.get();
+            log.info("Completing existing payment {} for trip {}", existing.getPaymentId(), request.getTripId());
+            existing.setStatus(PaymentStatus.SUCCESS);
+            existing.setPspTransactionId("PSP-" + UUID.randomUUID().toString());
+            existing.setPspResponse("Payment successful");
+            existing.setCompletedAt(LocalDateTime.now());
+            existing = paymentRepository.save(existing);
+            return mapToResponse(existing);
         }
         
         // Get trip details

@@ -97,6 +97,7 @@ The GoComet DAW is a multi-tenant, multi-region ride-hailing platform designed t
 **Key Methods:**
 - `createRide(RideRequest)`: Creates ride and attempts driver matching
 - `getRide(String rideId)`: Retrieves ride status (cached)
+- `getActiveRides()`: Returns all active rides (not completed or cancelled)
 - `updateRideStatus(String, RideStatus)`: Updates ride state
 
 **Caching Strategy:**
@@ -116,9 +117,10 @@ The GoComet DAW is a multi-tenant, multi-region ride-hailing platform designed t
 1. Calculate bounding box (10km radius)
 2. Query database for available drivers in bounding box
 3. Calculate Haversine distance for each driver
-4. Sort by distance
-5. Attempt to assign closest available driver (with optimistic locking)
-6. Fallback to next driver if assignment fails
+4. Sort by distance and filter to available drivers
+5. **Round-robin selection**: Use static counter to rotate through available drivers for fair distribution
+6. Attempt to assign selected driver (with optimistic locking)
+7. Fallback to next driver if assignment fails
 
 **Performance Optimizations:**
 - Spatial indexing on (latitude, longitude)
@@ -168,10 +170,11 @@ Minimum Fare: ₹40
 
 **Payment Flow:**
 1. Validate trip is completed
-2. Create payment record
-3. Call external PSP
-4. Update payment status
-5. Handle failures with retry logic
+2. Check for existing payment (idempotency)
+3. Create payment record with SUCCESS status immediately
+4. Simulate external PSP call (no delay in current implementation)
+5. Return payment response with SUCCESS status
+6. Handle failures gracefully
 
 ---
 
@@ -181,12 +184,14 @@ Minimum Fare: ₹40
 
 - **Framework**: Spring Boot 3.2.0
 - **Language**: Java 17
-- **Database**: PostgreSQL (primary), H2 (testing)
-- **Cache**: Redis
+- **Database**: PostgreSQL (primary), H2 (testing/development)
+- **Cache**: Redis (with graceful degradation if unavailable)
 - **Build Tool**: Gradle
 - **API**: RESTful APIs
+- **Frontend**: HTML, CSS, JavaScript (integrated in Spring Boot static resources)
 - **Validation**: Jakarta Validation
 - **ORM**: Spring Data JPA / Hibernate
+- **Monitoring**: New Relic APM Java Agent
 
 ### Package Structure
 
@@ -363,12 +368,41 @@ Get ride status.
   "rideId": "RIDE-1234567890",
   "riderId": "RIDER-1",
   "status": "IN_PROGRESS",
-  "driverId": 1,
+  "driverId": "DRIVER-1",
   "tripId": 100,
   "createdAt": "2024-01-15T10:30:00",
   "matchedAt": "2024-01-15T10:30:01",
   "acceptedAt": "2024-01-15T10:30:05"
 }
+```
+
+#### 2a. GET /v1/rides/active
+Get all active rides (not completed or cancelled).
+
+**Response:**
+```json
+[
+  {
+    "rideId": "RIDE-1234567890",
+    "riderId": "RIDER-1",
+    "status": "MATCHED",
+    "driverId": "DRIVER-1",
+    "tripId": null,
+    "createdAt": "2024-01-15T10:30:00",
+    "matchedAt": "2024-01-15T10:30:01",
+    "acceptedAt": null
+  },
+  {
+    "rideId": "RIDE-9876543210",
+    "riderId": "RIDER-2",
+    "status": "IN_PROGRESS",
+    "driverId": "DRIVER-2",
+    "tripId": 101,
+    "createdAt": "2024-01-15T10:35:00",
+    "matchedAt": "2024-01-15T10:35:01",
+    "acceptedAt": "2024-01-15T10:35:05"
+  }
+]
 ```
 
 #### 3. POST /v1/drivers/{id}/location
@@ -386,7 +420,10 @@ Update driver location.
 Accept ride assignment.
 
 **Query Parameters:**
-- `rideId`: Long (required)
+- `rideId`: Long (optional, numeric ID)
+- `rideIdString`: String (optional, alphanumeric ride ID like "RIDE-1234567890")
+
+**Note**: Either `rideId` or `rideIdString` must be provided. The endpoint supports both formats for flexibility.
 
 #### 5. POST /v1/trips/{id}/end
 End trip and calculate fare.
@@ -433,6 +470,8 @@ Process payment for a trip.
   "createdAt": "2024-01-15T11:01:00"
 }
 ```
+
+**Note**: Payment processing is synchronous and returns SUCCESS status immediately. The payment is created with SUCCESS status to ensure fast response times.
 
 ---
 
@@ -550,11 +589,42 @@ Process payment for a trip.
 
 ---
 
+## Frontend Integration
+
+### Dashboard Pages
+
+1. **Combined Dashboard** (`index.html`): 
+   - Ride request form
+   - Driver location update
+   - **Active Rides display** (auto-refreshes every 3 seconds)
+   - Activity log
+
+2. **Rider Dashboard** (`rider.html`):
+   - Ride request form
+   - Ride status tracking
+   - Payment processing
+   - Real-time status updates
+
+3. **Driver Dashboard** (`driver.html`):
+   - Location update
+   - Accept rides
+   - End trips
+   - Driver status display
+
+### Active Rides Feature
+
+The combined dashboard includes an "Active Rides" section that:
+- Fetches all active rides via `GET /v1/rides/active`
+- Auto-refreshes every 3 seconds
+- Displays ride ID, status, rider, driver, trip ID, and timestamps
+- Shows color-coded status badges
+- Updates in real-time as rides change status
+
 ## Future Enhancements
 
 1. **Message Queue**: Kafka/RabbitMQ for async processing
-2. **WebSocket**: Real-time updates for ride status
-3. **Surge Pricing**: Dynamic pricing based on demand
+2. **WebSocket**: Real-time updates for ride status (currently using polling)
+3. **Surge Pricing**: Dynamic pricing based on demand (basic surge multiplier implemented)
 4. **Multi-region**: Cross-region replication and failover
 5. **Advanced Matching**: ML-based driver-rider matching
 6. **Notifications**: SMS/Email/Push notifications
